@@ -1,12 +1,12 @@
 import torch, torch.nn as nn
-from src.models.base.bidirectional_mamba import BiMambaBlock, BiMambaEncoder
+from models.base.bidirectional_mamba import BiMambaBlock, BiMambaEncoder
 
 class MambaPolarDecoder(nn.Module):
 
     """
     A decoder for Polar Codes of block length N based on Bidirectional Mamba.
 
-    Takes: Channel Observation Vector(N), Frozen Bit Prior Vector(N), SNR(single value)
+    Takes: Channel Observation Vector(N), Frozen Bit Prior Vector(N), SNR(single value, in db)
     Input shape: (batch_size, block_length, 3) -> includes channel_output_value, frozen_prior_value, snr
 
     Predicts: Channel Input Vector(N)
@@ -105,8 +105,8 @@ class MambaPolarDecoder(nn.Module):
         if channel_ob_vector.dim()!=2 | frozen_prior.dim()!=2:
             raise ValueError("Channel observation vector and frozen prior vector must be (Batch,Sequence length)")
         
-        ch_emb = self.linear_embedding1(channel_ob_vector)
-        snr_emb = self.linear_embedding2(SNR_db)
+        ch_emb = self.linear_embedding1(channel_ob_vector.unsqueeze(-1))
+        snr_emb = self.linear_embedding2(SNR_db.unsqueeze(-1))
         froz_emb = self.discrete_embedding(frozen_prior)
         
        # print(f"Channel embedding: {ch_emb}\n\n")
@@ -132,7 +132,7 @@ class MambaPolarDecoder(nn.Module):
 # testing for N=3, batch=1
 model = MambaPolarDecoder(d_model=4, seq_len=3).to('cuda')
 
-channel_ob_vector = torch.tensor([ [[1.1], [0], [2]], ]).float().to('cuda')
+channel_ob_vector = torch.tensor([ [1.1, 0, 2], ]).float().to('cuda')
 frozen_prior_vector = torch.tensor([ [0, 0, 1], ]).int().to('cuda')
 snr = torch.tensor([[6]]).float().to('cuda')
 

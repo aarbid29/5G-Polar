@@ -80,7 +80,7 @@ def create_channel_input_vector(message_bits):
        channel_input_vector[reliability_seq[i]] = message_bits[i]
     
     for i in frozen_sets:
-       frozen_bits_prior_vector[i]=-1
+       frozen_bits_prior_vector[i]=1
        
        
     return channel_input_vector, frozen_bits_prior_vector, N
@@ -169,13 +169,14 @@ def awgn_channel(modulated_sequence:list, SNRs_db:list, message_bit_size:int, bl
  #  print(noises_np.shape)
 
    result = noises_np + modulated_sequence
+   result = result.squeeze(0)
 
    return result
 
 
 
 
-def generate_data(message_bit_size, SNRs_db, smoothing_factor ):
+def generate_data(message_bit_size, SNRs_db):
 
    """
    Generates a single data instance for given message bit size.
@@ -183,15 +184,21 @@ def generate_data(message_bit_size, SNRs_db, smoothing_factor ):
    """
 
    msg_sequence = np.random.randint(0, 2, size=message_bit_size)
-   target = one_hot_smoothing(msg_sequence, smoothing_factor=smoothing_factor)
+ #  target = one_hot_smoothing(msg_sequence, smoothing_factor=smoothing_factor)
+   
+   
 
    civ, frozen_bit_prior, N = create_channel_input_vector(message_bits=msg_sequence)
    polar_coded_form = polar_encode(N, civ)
    modulated_signal = modulation_bpsk(polar_coded_msg=polar_coded_form)
 
    channel_observation_vector = awgn_channel(modulated_sequence=modulated_signal, SNRs_db=SNRs_db, message_bit_size=message_bit_size, block_length=N)
+   target = civ
 
-   return channel_observation_vector, frozen_bit_prior, target, msg_sequence
+  # print(f"Shape of channel observation vector: {channel_observation_vector.shape}")
+   
+
+   return channel_observation_vector, frozen_bit_prior, target
 
 
 

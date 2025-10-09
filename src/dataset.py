@@ -1,0 +1,38 @@
+from torch.utils.data import Dataset, DataLoader
+import torch, pandas as pd, numpy as np
+from generate_dataset import generate_data
+
+
+DATASET_PATH = '../scripts/data_32bits_polar.csv'
+
+
+
+class PolarDecDataset(Dataset):
+
+    def __init__(self, snr_db,  num_samples, snr_noise_std=0.1, transform = None):
+        super().__init__()
+        self.snr_db = snr_db + np.random.normal(0, snr_noise_std)
+        self.num_samples = num_samples
+        
+
+    def __len__(self):
+        return self.num_samples
+        
+    def __getitem__(self, idx):
+         channel_observation_vector, frozen_bit_prior, target = generate_data(message_bit_size=np.random.choice([8, 16, 24]), SNRs_db=[self.snr_db])
+         channel_tensor = torch.tensor(channel_observation_vector, dtype=torch.float32)
+         frozen_tensor = torch.tensor(frozen_bit_prior, dtype=torch.float32)
+         snr_tensor = torch.tensor(self.snr_db, dtype=torch.float32)
+         target_tensor = torch.tensor(target, dtype=torch.float32)
+
+        
+         return channel_tensor, frozen_tensor, snr_tensor, target_tensor
+    
+
+
+    
+
+    
+
+
+        
