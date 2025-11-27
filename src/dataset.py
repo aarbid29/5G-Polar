@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset, DataLoader
 import torch, pandas as pd, numpy as np
 from generate_dataset import generate_data
+import math
 
 
 DATASET_PATH = '../scripts/data_32bits_polar.csv'
@@ -25,8 +26,10 @@ class PolarDecDataset(Dataset):
          snr_tensor = torch.tensor(self.snr_db, dtype=torch.float32)
          target_tensor = torch.tensor(target, dtype=torch.float32)
 
+         llrs = 4* channel_observation_vector * math.pow(10, self.snr_db/10)
+
         
-         return channel_tensor, frozen_tensor, snr_tensor, target_tensor
+         return llrs, frozen_tensor, snr_tensor, target_tensor
     
 
 

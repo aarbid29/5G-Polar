@@ -125,7 +125,7 @@ def one_hot(msg_bit_sequence: int):
 
    seq_array = np.array([b for b in msg_bit_sequence], dtype=int)
    one_hot = np.zeros((len(seq_array), 2), dtype=int)
-   one_hot[np.arange(len(seq_array)), seq_array] = 1
+   one_hot[np.arange(len(seq_array)), seq_array] = 1 # fancy way of creating one hot encoding: [0, 1, 2], [0, 1, 0] => insert 1 at one_hot[0,0], one_hot[1,1] and so on
    return one_hot
    
 
