@@ -66,6 +66,8 @@ class MambaPolarDecoder(nn.Module):
         self.layer_norm = nn.LayerNorm(d_model)
         self.final_proj_layer = nn.Linear(d_model, 1)
 
+        self.init_weights_new()
+
     
     def init_weights_new(self):
       
@@ -96,17 +98,17 @@ class MambaPolarDecoder(nn.Module):
         with torch.no_grad():
             self.alpha.fill_(1.0)     # observation — usually strong
             self.beta.fill_(0.05)     # SNR — starting small so it doesn't dominate
-            self.gamma.fill_(0.1)     # prior — small but present
+            self.gamma.fill_(0.5)     # prior — small but present
         
 
     
     def forward(self, channel_ob_vector, frozen_prior, SNR_db):
 
-        if channel_ob_vector.dim()!=2 | frozen_prior.dim()!=2:
+        if channel_ob_vector.dim()!=2 or frozen_prior.dim()!=2:
             raise ValueError("Channel observation vector and frozen prior vector must be (Batch,Sequence length)")
         
         ch_emb = self.linear_embedding1(channel_ob_vector.unsqueeze(-1))
-        snr_emb = self.linear_embedding2(SNR_db.unsqueeze(-1))
+        snr_emb = self.linear_embedding2(SNR_db.unsqueeze(-1).float())
         froz_emb = self.discrete_embedding(frozen_prior)
         
        # print(f"Channel embedding: {ch_emb}\n\n")
@@ -115,10 +117,15 @@ class MambaPolarDecoder(nn.Module):
 
         encoder_input = self.alpha*ch_emb+self.beta*snr_emb+self.gamma*froz_emb #ramro result ayena vane try concatenation without parameters multiply
 
-        for layer in self.encoder_layers:
-            encoder_input=layer(encoder_input)
-        
+        residuals = []
         x = encoder_input
+        for layer in self.encoder_layers:
+            x_new = layer(x)
+            residuals.append(x_new)
+            x = x_new + x 
+        
+        #if len(residuals) > 1:
+      #   x = sum(residuals) / len(residuals)
        
         return self.final_proj_layer(x).squeeze(-1)
     
@@ -130,6 +137,8 @@ class MambaPolarDecoder(nn.Module):
 
 
 # testing for N=3, batch=1
+
+'''
 model = MambaPolarDecoder(d_model=4, seq_len=3).to('cuda')
 
 channel_ob_vector = torch.tensor([ [1.1, 0, 2], ]).float().to('cuda')
@@ -141,7 +150,7 @@ print(channel_ob_vector.shape)
 output = model(channel_ob_vector, frozen_prior_vector, snr)
 print(output)
 
-        
+'''     
 
         
 
