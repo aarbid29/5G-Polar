@@ -38,11 +38,14 @@ class MambaPolarDecoder(nn.Module):
         self.d_conv = d_conv
         self.expand = expand
         self.dropout = dropout
+        self.residual_scale = residual_scale
         
 
         self.discrete_embedding = nn.Embedding(2, self.d_model) # for frozen 
         self.linear_embedding1 = nn.Linear(in_features=1, out_features=d_model )
         self.linear_embedding2 = nn.Linear(in_features=1, out_features=d_model)
+
+        self.linear_input_layer = nn.Linear(3*self.d_model, d_model)
 
         self.alpha = nn.Parameter(torch.tensor(1.0))   # for channel
         self.beta = nn.Parameter(torch.tensor(1.0))    # for SNR
@@ -64,6 +67,9 @@ class MambaPolarDecoder(nn.Module):
         ])
 
         self.layer_norm = nn.LayerNorm(d_model)
+        self.post_norms = nn.ModuleList([
+    nn.LayerNorm(self.d_model) for _ in range(self.num_layer_encoder)
+])
         self.final_proj_layer = nn.Linear(d_model, 1)
 
         self.init_weights_new()
@@ -95,10 +101,10 @@ class MambaPolarDecoder(nn.Module):
             nn.init.zeros_(self.layer_norm.bias)
 
        
-        with torch.no_grad():
-            self.alpha.fill_(1.0)     # observation — usually strong
-            self.beta.fill_(0.05)     # SNR — starting small so it doesn't dominate
-            self.gamma.fill_(0.5)     # prior — small but present
+        #with torch.no_grad():
+        #    self.alpha.fill_(1.0)     # observation — usually strong
+        #    self.beta.fill_(0.05)     # SNR — starting small so it doesn't dominate
+        #    self.gamma.fill_(0.5)     # prior — small but present
         
 
     
@@ -110,19 +116,31 @@ class MambaPolarDecoder(nn.Module):
         ch_emb = self.linear_embedding1(channel_ob_vector.unsqueeze(-1))
         snr_emb = self.linear_embedding2(SNR_db.unsqueeze(-1).float())
         froz_emb = self.discrete_embedding(frozen_prior)
+
         
-       # print(f"Channel embedding: {ch_emb}\n\n")
-       # print(f"SNR embedding: {snr_emb}\n\n")
-        #print(f"frozen embedding: {froz_emb}\n\n")
 
-        encoder_input = self.alpha*ch_emb+self.beta*snr_emb+self.gamma*froz_emb #ramro result ayena vane try concatenation without parameters multiply
+        snr_emb = snr_emb.unsqueeze(1)
+        snr_emb = snr_emb.expand(-1, 32, -1) # to make sure for each bit's d_model embedding, there is a single d_model embedding value of snr
 
-        residuals = []
+      #  print(f"channel vector emb shape: {ch_emb.shape}\n")
+       # print(f"snr emb shape: {snr_emb.shape}\n")
+     #   print(f"frozen shape: {froz_emb.shape}")
+      
+
+        #encoder_input = self.alpha*ch_emb+self.beta*snr_emb+self.gamma*froz_emb #ramro result ayena vane try concatenation without parameters multiply
+
+      #  print("check 1")
+        encoder_input = torch.cat([ch_emb, snr_emb, froz_emb], dim=-1)
+        encoder_input = self.linear_input_layer(encoder_input)
+
+        
+     #   residuals = []
         x = encoder_input
-        for layer in self.encoder_layers:
+        for idx, layer in enumerate(self.encoder_layers):
             x_new = layer(x)
-            residuals.append(x_new)
-            x = x_new + x 
+        #    residuals.append(x_new)
+            x = x_new*self.residual_scale + x
+            x = self.post_norms[idx](x)
         
         #if len(residuals) > 1:
       #   x = sum(residuals) / len(residuals)
