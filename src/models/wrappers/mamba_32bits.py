@@ -43,9 +43,9 @@ class MambaPolarDecoder(nn.Module):
 
         self.discrete_embedding = nn.Embedding(2, self.d_model) # for frozen 
         self.linear_embedding1 = nn.Linear(in_features=1, out_features=d_model )
-        self.linear_embedding2 = nn.Linear(in_features=1, out_features=d_model)
+     #   self.linear_embedding2 = nn.Linear(in_features=1, out_features=d_model)
 
-        self.linear_input_layer = nn.Linear(3*self.d_model, d_model)
+        self.linear_input_layer = nn.Linear(2*self.d_model, d_model)
 
         self.alpha = nn.Parameter(torch.tensor(1.0))   # for channel
         self.beta = nn.Parameter(torch.tensor(1.0))    # for SNR
@@ -82,9 +82,9 @@ class MambaPolarDecoder(nn.Module):
             nn.init.zeros_(self.linear_embedding1.bias)
 
        
-        nn.init.xavier_uniform_(self.linear_embedding2.weight)
-        if self.linear_embedding2.bias is not None:
-            nn.init.zeros_(self.linear_embedding2.bias)
+      #  nn.init.xavier_uniform_(self.linear_embedding2.weight)
+     #   if self.linear_embedding2.bias is not None:
+     #       nn.init.zeros_(self.linear_embedding2.bias)
 
        
         nn.init.normal_(self.discrete_embedding.weight, mean=0.0, std=1e-2)
@@ -114,13 +114,13 @@ class MambaPolarDecoder(nn.Module):
             raise ValueError("Channel observation vector and frozen prior vector must be (Batch,Sequence length)")
         
         ch_emb = self.linear_embedding1(channel_ob_vector.unsqueeze(-1))
-        snr_emb = self.linear_embedding2(SNR_db.unsqueeze(-1).float())
+      #  snr_emb = self.linear_embedding2(SNR_db.unsqueeze(-1).float())
         froz_emb = self.discrete_embedding(frozen_prior)
 
         
 
-        snr_emb = snr_emb.unsqueeze(1)
-        snr_emb = snr_emb.expand(-1, 32, -1) # to make sure for each bit's d_model embedding, there is a single d_model embedding value of snr
+      #  snr_emb = snr_emb.unsqueeze(1)
+      #  snr_emb = snr_emb.expand(-1, 32, -1) # to make sure for each bit's d_model embedding, there is a single d_model embedding value of snr
 
       #  print(f"channel vector emb shape: {ch_emb.shape}\n")
        # print(f"snr emb shape: {snr_emb.shape}\n")
@@ -130,7 +130,7 @@ class MambaPolarDecoder(nn.Module):
         #encoder_input = self.alpha*ch_emb+self.beta*snr_emb+self.gamma*froz_emb #ramro result ayena vane try concatenation without parameters multiply
 
       #  print("check 1")
-        encoder_input = torch.cat([ch_emb, snr_emb, froz_emb], dim=-1)
+        encoder_input = torch.cat([ch_emb, froz_emb], dim=-1)
         encoder_input = self.linear_input_layer(encoder_input)
 
         
