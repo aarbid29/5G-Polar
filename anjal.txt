@@ -1,4 +1,0 @@
--> evaulate the new model for frzoen, non frozen positions
--> try more tweaks
--> any possible changes that can be done to way the input is given
--> film layer

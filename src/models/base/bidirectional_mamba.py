@@ -2,14 +2,13 @@ import torch
 import torch.nn as nn
 from mamba_ssm import Mamba
 
+
 class BiMambaBlock(nn.Module):
-    """
-    One bidirectional Mamba block:
-      - Runs a forward Mamba on input (no time flip).
-      - Runs a backward Mamba on time-flipped input and un-flips the output.
-      - Each branch uses pre-LN, Mamba, dropout and residual.
-      - Outputs average of forward & reverse branch (with optional residual scaling).
-    """
+    # BiMambaBlock:
+    # Hastwo branches: forward and reverse.
+    #Each branch uses pre-LN, Mamba, dropout and residual.
+    # Applies Mamba operations, followed by Feed-Forward Networks, with residual connections and Layer Normalization.
+    # The final output is the average of the forward and reverse branches.
     def __init__(
         self,
         d_model: int,
@@ -59,10 +58,8 @@ class BiMambaBlock(nn.Module):
         self.residual_scale = residual_scale
 
     def forward_branch(self, x, pre_ln, mamba, post_ln, ffn, flip_time=False):
-        """
-        x: (B, S, D)
-        flip_time: if True, flip along time dim before applying mamba and unflip after
-        """
+       # x: (B, S, D)
+     #flip_time: if True, flip along time dim before applying mamba and unflip after
         x_in = x
         if flip_time:
             x_proc = torch.flip(x, dims=[1])
@@ -83,7 +80,7 @@ class BiMambaBlock(nn.Module):
         y = ffn(h)
         y = self.dropout(y)
         y = h + self.residual_scale * y
-        y = post_ln(y)  # apply post norm again (keeps pattern similar to transformer block)
+        y = post_ln(y)  # apply post norm again 
         return y
 
     def forward(self, x):
@@ -93,14 +90,11 @@ class BiMambaBlock(nn.Module):
 
 
 class BiMambaEncoder(nn.Module):
-    """
-    Bidirectional Mamba Encoder that:
-      - Accepts x of shape (B, S) with {0,1} (long) or (B, S, D) floats.
-      - If input is (B, S) it uses nn.Embedding(2, d_model).
-      - Adds learnable positional embeddings.
-      - Stacks num_layers BiMambaBlock.
-      - Returns (B, S, d_model) normalized output.
-    """
+    # BiMambaEncoder:
+    # Takes an input sequence, adds positional embeddings, and processes the sequence through multiple BiMambaBlocks.
+    #Stacks num_layers BiMambaBlock.
+    # Outputs the transformed sequence with shape (B, S, d_model).
+  
     def __init__(
         self,
         d_model: int = 64,
@@ -150,13 +144,7 @@ class BiMambaEncoder(nn.Module):
                     nn.init.zeros_(m.bias)
 
     def forward(self, x):
-        """
-        x is:
-          
-          - (B, S,  D) float already embedded (D must equal d_model) --> ramro result vayena vane try with 4d with each input's concatted
-        returns:
-          (B, S, d_model)
-        """
+       #x is (B,S,D) here
                         
         if x.dim() == 3:
             if x.size(2) != self.d_model:
@@ -165,7 +153,7 @@ class BiMambaEncoder(nn.Module):
         else:
             raise ValueError("Input must be (B,S,  D) i.e already embedded") 
 
-        # add positional embeddings (truncate if sequence shorter)
+        # add positional embeddings 
         L = h.size(1)
         if L > self.seq_len:
             raise ValueError(f"Sequence length {L} > seq_len {self.seq_len}")
