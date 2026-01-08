@@ -7,7 +7,6 @@ import math
 DATASET_PATH = '../scripts/data_32bits_polar.csv'
 
 
-
 class PolarDecDataset(Dataset):
 
     def __init__(self, snr_db,  num_samples, seq_length, snr_noise_std=0.1, fixed_msg_bit_size = None, transform = None):

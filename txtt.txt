@@ -1,0 +1,45 @@
+.
+The BiMambaBlock is a bidirectional sequence processing block that applies Mamba operations on both the forward and reverse directions of the input sequence, capturing dependencies in both time directions, and refining the output through residual connections and a feed-forward network.
+The BiMambaEncoder stacks multiple BiMambaBlocks, adding positional embeddings and applying these blocks to the input sequence, enabling it to learn complex temporal dependencies and generate enriched representations of the sequence.
+
+
+Possible Flow in a Full Polar Decoder Pipeline:
+1. Input: The received signal (channel observations) along with frozen bit priors (for Polar codes) and SNR valuesare given as input.
+2. Encoding/Feature Extraction: The input goes through the BiMambaEncoder (as in your code). This step extracts useful features from the received signal using Bidirectional Mamba operations.
+3. PolarMamba Decoder:
+    * After the feature extraction, the PolarMamba Decoder (which is not included in your code but could be a separate module) would process the transformed output from the encoder.
+    * The PolarMamba Decoder would leverage the structure of the Polar code and the extracted features to iteratively decode the message bits and handle frozen bit priors appropriately.
+4. Output: The final output would be the decoded message bits.
+
+
+IN BIMAMBA BLOCK 
+
+Flow of Operations:
+1. Pre-LN: Normalizes the input for better training stability.
+2. Mamba Operation: Transforms the data through the core Mamba process.
+3. Residual Connection: Adds the original input back to the output of Mamba.
+4. FFN: Applies a linear transformation, followed by non-linearity (GELU), dropout, and another linear transformation.
+5. Post-LN: Normalizes the output of the FFN for further stability.
+6. Reverse Branch: The input is reversed, processed in the same way, and then reversed back to ensure bidirectional context.
+7. Final Output: The forward and reverse processed outputs are averaged, combining both directions' information.
+
+Step-by-Step Flow:
+1. Input Sequence: The sequence x (shape (B, S, D)) enters the block.
+2. Layer Normalization: The input is passed through Layer Normalization (pre_ln), which helps standardize the input.
+3. Mamba Operation: The normalized input is processed by the Mamba operation (self.mamba_f for the forward branch or self.mamba_r for the reverse branch). The exact nature of the Mamba operation is hidden, but it likely involves some form of attention or other sequence-processing mechanisms that transform the input sequence.
+4. Dropout: After the Mamba operation, dropout is applied for regularization.
+5. Residual Connection: The output from the Mamba operation is added back to the original input (residual connection), scaled by residual_scale. This helps the model learn more stable representations.
+6. Feed-Forward Network: The output is passed through a feed-forward network (FFN) to refine the learned features.
+7. Final Residual: Another residual connection is applied after the FFN, with another Layer Normalization step.
+
+
+forward() method (Main Logic):
+The forward method of BiMambaEncoder processes the input in the following steps:
+1. Input Embedding Check:
+    * If the input x is already embedded (i.e., it has the required shape (B, S, D)), it proceeds to add the positional embeddings.
+2. Positional Embedding Addition:
+    * The positional embeddings are added to the input sequence to provide positional information.
+3. Passing Through BiMamba Blocks:
+    * The input is passed through each of the BiMambaBlocks sequentially, allowing the model to learn complex transformations on the input sequence.
+4. Normalization:
+    * After passing through all layers, the output is normalized using LayerNorm.
