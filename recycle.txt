@@ -1,0 +1,243 @@
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=0)  # slightly lower LR for stability
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
+
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0) scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+
+
+
+----------------------------------
+SNR  = 6db and 10db
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=0) scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+
+SNR = 3 db
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, weight_decay=0)  # slightly lower LR for stability
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2, min_lr=1e-6, verbose=True)
+
+SNR = 0 dB
+optimizer = torch.optim.Adam(model.parameters(), lr=2e-4, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                       factor=0.5, patience=4, min_lr=1e-6)
+
+ SNR = −3 dB
+optimizer = torch.optim.Adam(model.parameters(), lr=1.5e-4, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                       factor=0.5, patience=4, min_lr=8e-7)
+
+ SNR = −6 dB
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                       factor=0.5, patience=5, min_lr=5e-7)
+
+ SNR = −10 dB
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-5, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                       factor=0.5, patience=5, min_lr=1e-7)
+
+def calc_save_ber(
+    model,
+    device,
+    msg_bit_sizes: list,
+    snr_db: list,
+    num_samples=32000,
+    batch_size=32,
+    json_file_name=None,
+):
+    """
+    Calculate BER over a test dataset and save detailed BER stats
+    for message and frozen bits.
+    """
+
+    eval_results = {}
+
+    for each_snr_val in snr_db:
+        print(f"\nEvaluating for SNR = {each_snr_val} dB\n")
+
+        snr_key = f"{each_snr_val}_snr"
+        eval_results[snr_key] = {}
+        ber_list = []
+
+        for each_msg_bit_size in msg_bit_sizes:
+            print(f"  Message bit size = {each_msg_bit_size}")
+
+            total_msg_bit_errors = 0
+            total_frozen_bit_errors = 0
+            total_msg_bits = 0
+            total_frozen_bits = 0
+
+            test_set = PolarDecDataset(
+                snr_db=each_snr_val,
+                num_samples=num_samples,
+                fixed_msg_bit_size=each_msg_bit_size,
+                seq_length=32,
+            )
+
+            test_loader = DataLoader(
+                dataset=test_set,
+                batch_size=batch_size,
+                shuffle=False,
+            )
+
+            model.eval()
+    with torch.no_grad():
+        for channel_tensor, frozen_tensor, snr_tensor, target_tensor in test_loader:
+
+            # ensure correct dtypes
+            channel_tensor = channel_tensor.to(device).float()  # float32
+            frozen_tensor = frozen_tensor.to(device).long()     # int64
+            target_tensor = target_tensor.to(device).long()     # int64
+
+            # forward pass
+            logits = model(channel_tensor, frozen_tensor, snr_tensor)
+
+            # logits -> predicted bits
+            predicted = (logits > 0).long()
+
+            # masks
+            mask_msg = (frozen_tensor == 1)
+            mask_frozen = (frozen_tensor == 0)
+
+            msg_target = target_tensor[mask_msg]
+            msg_pred = predicted[mask_msg]
+
+            frozen_target = target_tensor[mask_frozen]
+            frozen_pred = predicted[mask_frozen]
+
+            # count errors
+            total_msg_bit_errors += (msg_target != msg_pred).sum().item()
+            total_frozen_bit_errors += (frozen_target != frozen_pred).sum().item()
+
+            # count total bits
+            total_msg_bits += msg_target.numel()
+            total_frozen_bits += frozen_target.numel()
+
+
+            total_bits = total_msg_bits + total_frozen_bits
+            total_error_bits = total_msg_bit_errors + total_frozen_bit_errors
+
+            avg_net_ber = total_error_bits / total_bits
+            avg_msg_ber = total_msg_bit_errors / total_msg_bits if total_msg_bits > 0 else 0.0
+            avg_frozen_ber = (
+                total_frozen_bit_errors / total_frozen_bits if total_frozen_bits > 0 else 0.0
+            )
+
+            print(f"    Net BER     : {avg_net_ber:.6e}")
+            print(f"    Msg BER     : {avg_msg_ber:.6e}")
+            print(f"    Frozen BER  : {avg_frozen_ber:.6e}\n")
+
+            ber_list.append(avg_net_ber)
+
+            eval_results[snr_key][each_msg_bit_size] = {
+                "average_net_bit_error_rate": avg_net_ber,
+                "average_msg_bit_error_rate": avg_msg_ber,
+                "average_frozen_bit_error_rate": avg_frozen_ber,
+                "batch_size": batch_size,
+                "num_samples": num_samples,
+                "total_bits": total_bits,
+                "total_error_bits": total_error_bits,
+                "total_msg_bits": total_msg_bits,
+                "total_frozen_bits": total_frozen_bits,
+            }
+
+        eval_results[snr_key]["overall_ber"] = sum(ber_list) / len(ber_list)
+
+    if json_file_name:
+        with open(f"{json_file_name}.json", "w") as f:
+            json.dump(eval_results, f, indent=4)
+        print(f"Results saved to {json_file_name}.json")
+
+    return eval_results
+---------------------------------------------------------------------------------------------------------------------------------------
+
+1️SNR 6
+
+Base model: SNR 10 trained model (BER ~0.024, LR 1e-4 i.e in congif 16  )
+
+Optimizer / Scheduler:
+
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-5, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=3, min_lr=5e-7, verbose=True
+)
+
+
+
+Epochs: 3–5 (monitor BER, stop early if no improvement)
+
+2️SNR 3
+
+Base model: SNR 6 trained model
+
+Optimizer / Scheduler:
+
+optimizer = torch.optim.Adam(model.parameters(), lr=2e-5, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=3, min_lr=2e-7, verbose=True
+)
+
+
+
+Epochs: 3–5
+
+3️ SNR 0
+
+Base model: SNR 3 trained model
+
+Optimizer / Scheduler:
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=3, min_lr=1e-7, verbose=True
+)
+
+
+
+
+Epochs: 3–5
+
+4️SNR -3
+
+Base model: SNR 0 trained model
+
+Optimizer / Scheduler:
+
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-6, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=4, min_lr=5e-8, verbose=True
+)
+
+
+
+
+Epochs: 3–5
+
+5️ SNR -6
+
+Base model: SNR -3 trained model
+
+Optimizer / Scheduler:
+
+optimizer = torch.optim.Adam(model.parameters(), lr=2e-6, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=4, min_lr=2e-8, verbose=True
+)
+
+
+
+
+Epochs: 3–5
+
+6️ SNR -10
+
+Base model: SNR -6 trained model
+
+Optimizer / Scheduler:
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-6, weight_decay=0)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.5, patience=4, min_lr=1e-8, verbose=True
+)
+
+
+
+Epochs: 3–5
