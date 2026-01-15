@@ -193,6 +193,9 @@ def generate_data(message_bit_size, SNRs_db):
    modulated_signal = modulation_bpsk(polar_coded_msg=polar_coded_form)
 
    channel_observation_vector = awgn_channel(modulated_sequence=modulated_signal, SNRs_db=SNRs_db, message_bit_size=message_bit_size, block_length=N)
+   # Example: during dataset __getitem__, you can re-sample noise each call
+   # channel_observation_vector = awgn_channel(modulated_signal, SNRs_db=[snr_db], message_bit_size=message_bit_size, block_length=N)
+
    target = civ
 
   # print(f"Shape of channel observation vector: {channel_observation_vector.shape}")
