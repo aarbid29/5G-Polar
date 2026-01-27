@@ -1,0 +1,218 @@
+{
+    "10_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.00723046875,
+            "average_msg_bit_error_rate": 0.028921875,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 7404,
+            "total_msg_bits": 256000,
+            "total_frozen_bits": 768000
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.016560546875,
+            "average_msg_bit_error_rate": 0.03312109375,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 16958,
+            "total_msg_bits": 512000,
+            "total_frozen_bits": 512000
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.0469716796875,
+            "average_msg_bit_error_rate": 0.06262890625,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 48099,
+            "total_msg_bits": 768000,
+            "total_frozen_bits": 256000
+        },
+        "overall_ber": 0.023587565104166666
+    },
+    "8_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.02012890625,
+            "average_msg_bit_error_rate": 0.080515625,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 20612,
+            "total_msg_bits": 256000,
+            "total_frozen_bits": 768000
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.0220625,
+            "average_msg_bit_error_rate": 0.044125,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 22592,
+            "total_msg_bits": 512000,
+            "total_frozen_bits": 512000
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.0491640625,
+            "average_msg_bit_error_rate": 0.06555208333333333,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 50344,
+            "total_msg_bits": 768000,
+            "total_frozen_bits": 256000
+        },
+        "overall_ber": 0.030451822916666666
+    },
+    "6_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.036890625,
+            "average_msg_bit_error_rate": 0.1475625,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 37776,
+            "total_msg_bits": 256000,
+            "total_frozen_bits": 768000
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.0392021484375,
+            "average_msg_bit_error_rate": 0.078404296875,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 40143,
+            "total_msg_bits": 512000,
+            "total_frozen_bits": 512000
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.0628828125,
+            "average_msg_bit_error_rate": 0.08384375,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 64392,
+            "total_msg_bits": 768000,
+            "total_frozen_bits": 256000
+        },
+        "overall_ber": 0.046325195312500005
+    },
+    "4_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.0546875,
+            "average_msg_bit_error_rate": 0.2187421875,
+            "average_frozen_bit_error_rate": 2.6041666666666666e-06,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 56000,
+            "total_msg_bits": 256000,
+            "total_frozen_bits": 768000
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.0685576171875,
+            "average_msg_bit_error_rate": 0.137115234375,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 70203,
+            "total_msg_bits": 512000,
+            "total_frozen_bits": 512000
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.09795703125,
+            "average_msg_bit_error_rate": 0.130609375,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 100308,
+            "total_msg_bits": 768000,
+            "total_frozen_bits": 256000
+        },
+        "overall_ber": 0.07373404947916667
+    },
+    "2_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.06965234375,
+            "average_msg_bit_error_rate": 0.27859375,
+            "average_frozen_bit_error_rate": 5.208333333333333e-06,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 71324,
+            "total_msg_bits": 256000,
+            "total_frozen_bits": 768000
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.1016953125,
+            "average_msg_bit_error_rate": 0.203390625,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 104136,
+            "total_msg_bits": 512000,
+            "total_frozen_bits": 512000
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.151384765625,
+            "average_msg_bit_error_rate": 0.20184635416666666,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 155018,
+            "total_msg_bits": 768000,
+            "total_frozen_bits": 256000
+        },
+        "overall_ber": 0.10757747395833332
+    },
+    "0_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.0816015625,
+            "average_msg_bit_error_rate": 0.326375,
+            "average_frozen_bit_error_rate": 1.0416666666666666e-05,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 83560,
+            "total_msg_bits": 256000,
+            "total_frozen_bits": 768000
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.1320693359375,
+            "average_msg_bit_error_rate": 0.264138671875,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 135239,
+            "total_msg_bits": 512000,
+            "total_frozen_bits": 512000
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.204900390625,
+            "average_msg_bit_error_rate": 0.27320052083333335,
+            "average_frozen_bit_error_rate": 0.0,
+            "batch_size": 32,
+            "num_samples": 32000,
+            "total_bits": 1024000,
+            "total_error_bits": 209818,
+            "total_msg_bits": 768000,
+            "total_frozen_bits": 256000
+        },
+        "overall_ber": 0.13952376302083333
+    }
+}
