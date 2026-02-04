@@ -1,0 +1,23 @@
+{
+  "d_model": 128,
+  "d_state": 128,
+  "d_conv": 4,
+  "expand": 2,
+  "N_dec": 8,
+  "epochs": 20000,
+  "T_max": 20000,
+  "train_batch_count": 1000,
+  "batch_size": 128,
+  "test_batch_count": 1000,
+  "test_batch_size": 512,
+  "lr": 0.00025,
+  "warmup_lr": 0.001,
+  "warmup_length": 10,
+  "eta_min": 1e-10,
+  "gradient_clipping": 1.0,
+  "dropout": 0.1,
+  "seq_len": 32,
+  "enable_multi_loss": true,
+  "enable_early_stopping": true,
+  "zero_cw": true
+}

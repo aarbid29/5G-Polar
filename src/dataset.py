@@ -1,10 +1,8 @@
 from torch.utils.data import Dataset, DataLoader
 import torch, pandas as pd, numpy as np
 from generate_dataset import generate_data
+
 import math
-
-
-DATASET_PATH = '../scripts/data_32bits_polar.csv'
 
 class PolarDecDataset(Dataset):
 
@@ -57,11 +55,3 @@ class PolarDecDataset(Dataset):
 
         return llrs, frozen_tensor, snr_tensor, target_tensor
 
-
-
-
-
-    
-
-
-        

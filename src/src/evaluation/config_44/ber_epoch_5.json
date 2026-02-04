@@ -1,0 +1,50 @@
+{
+    "10_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.1973828125
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.1291796875
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.121962890625
+        },
+        "overall_ber": 0.14950846354166666
+    },
+    "6_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.27671875
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.170791015625
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.179521484375
+        },
+        "overall_ber": 0.20901041666666667
+    },
+    "3_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.31615234375
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.2630859375
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.315341796875
+        },
+        "overall_ber": 0.29819335937499997
+    },
+    "0_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.33873046875
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.333017578125
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.443681640625
+        },
+        "overall_ber": 0.37180989583333335
+    }
+}

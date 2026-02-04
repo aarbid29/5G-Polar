@@ -1,0 +1,56 @@
+{
+    "4_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.05443359375,
+            "average_msg_bit_error_rate": 0.217734375,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.0665234375,
+            "average_msg_bit_error_rate": 0.133046875,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.080576171875,
+            "average_msg_bit_error_rate": 0.10743489583333334,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "overall_ber": 0.067177734375
+    },
+    "5_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.047802734375,
+            "average_msg_bit_error_rate": 0.1912109375,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.04845703125,
+            "average_msg_bit_error_rate": 0.0969140625,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.057666015625,
+            "average_msg_bit_error_rate": 0.07688802083333333,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "overall_ber": 0.05130859375
+    },
+    "6_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.038681640625,
+            "average_msg_bit_error_rate": 0.1547265625,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.032060546875,
+            "average_msg_bit_error_rate": 0.06412109375,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.036171875,
+            "average_msg_bit_error_rate": 0.04822916666666666,
+            "average_frozen_bit_error_rate": 0.0
+        },
+        "overall_ber": 0.03563802083333333
+    }
+}

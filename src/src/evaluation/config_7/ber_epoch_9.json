@@ -1,0 +1,38 @@
+{
+    "10_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.0071484375
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.01677734375
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.062431640625
+        },
+        "overall_ber": 0.02878580729166667
+    },
+    "5_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.047568359375
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.055908203125
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.090146484375
+        },
+        "overall_ber": 0.064541015625
+    },
+    "0_snr": {
+        "8": {
+            "average_net_bit_error_rate": 0.082265625
+        },
+        "16": {
+            "average_net_bit_error_rate": 0.1378125
+        },
+        "24": {
+            "average_net_bit_error_rate": 0.224267578125
+        },
+        "overall_ber": 0.148115234375
+    }
+}

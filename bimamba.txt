@@ -1,0 +1,849 @@
+import torch
+import torch.nn as nn
+from mamba_ssm import Mamba
+
+
+class BiMambaBlock(nn.Module):
+    # BiMambaBlock:
+    # Hastwo branches: forward and reverse.
+    #Each branch uses pre-LN, Mamba, dropout and residual.
+    # Applies Mamba operations, followed by Feed-Forward Networks, with residual connections and Layer Normalization.
+    # The final output is the average of the forward and reverse branches.
+    def __init__(
+        self,
+        d_model: int,
+        d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
+        dropout: float = 0.1,
+        residual_scale: float = 1.0,
+        share_norm: bool = False,
+        share_ffn: bool = False,
+    ):
+        super().__init__()
+        # forward branch
+        self.pre_ln_f = nn.LayerNorm(d_model)
+        self.mamba_f = Mamba(d_model=d_model, d_state=d_state, d_conv=d_conv, expand=expand)
+        self.post_ln_f = nn.LayerNorm(d_model)
+        self.ffn_f = nn.Sequential(
+            nn.Linear(d_model, d_model * 4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 4, d_model),
+            nn.Dropout(dropout),
+        )
+
+        # reverse branch
+        if share_norm:
+            self.pre_ln_r = self.pre_ln_f
+            self.post_ln_r = self.post_ln_f
+        else:
+            self.pre_ln_r = nn.LayerNorm(d_model)
+            self.post_ln_r = nn.LayerNorm(d_model)
+
+        self.mamba_r = Mamba(d_model=d_model, d_state=d_state, d_conv=d_conv, expand=expand)
+
+        if share_ffn:
+            self.ffn_r = self.ffn_f
+        else:
+            self.ffn_r = nn.Sequential(
+                nn.Linear(d_model, d_model * 4),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model * 4, d_model),
+                nn.Dropout(dropout),
+            )
+
+        self.dropout = nn.Dropout(dropout)
+        self.residual_scale = residual_scale
+
+    def forward_branch(self, x, pre_ln, mamba, post_ln, ffn, flip_time=False):
+       # x: (B, S, D)
+     #flip_time: if True, flip along time dim before applying mamba and unflip after
+        x_in = x
+        if flip_time:
+            x_proc = torch.flip(x, dims=[1])
+        else:
+            x_proc = x
+
+        h = pre_ln(x_proc)
+        h = mamba(h)
+        h = self.dropout(h)
+        if flip_time:
+            h = torch.flip(h, dims=[1])
+
+        # residual + post norm
+        h = x_in + self.residual_scale * h
+        h = post_ln(h)
+
+        # feedforward with residual
+        y = ffn(h)
+        y = self.dropout(y)
+        y = h + self.residual_scale * y
+        y = post_ln(y)  # apply post norm again 
+        return y
+
+    def forward(self, x):
+        out_f = self.forward_branch(x, self.pre_ln_f, self.mamba_f, self.post_ln_f, self.ffn_f, flip_time=False)
+        out_r = self.forward_branch(x, self.pre_ln_r, self.mamba_r, self.post_ln_r, self.ffn_r, flip_time=True)
+        return 0.5 * (out_f + out_r)
+
+
+class BiMambaEncoder(nn.Module):
+    # BiMambaEncoder:
+    # Takes an input sequence, adds positional embeddings, and processes the sequence through multiple BiMambaBlocks.
+    #Stacks num_layers BiMambaBlock.
+    # Outputs the transformed sequence with shape (B, S, d_model).
+  
+    def __init__(
+        self,
+        d_model: int = 64,
+        num_layers: int = 4,
+        seq_len: int = 512,
+        d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
+        dropout: float = 0.1,
+        residual_scale: float = 1.0,
+        share_norm: bool = False,
+        share_ffn: bool = False,
+        use_embedding_for_bits: bool = True,
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.seq_len = seq_len
+        self.use_embedding_for_bits = use_embedding_for_bits
+
+    
+        self.pos_emb = nn.Parameter(torch.zeros(1, seq_len, d_model))
+
+        self.layers = nn.ModuleList([
+            BiMambaBlock(
+                d_model=d_model,
+                d_state=d_state,
+                d_conv=d_conv,
+                expand=expand,
+                dropout=dropout,
+                residual_scale=residual_scale,
+                share_norm=share_norm,
+                share_ffn=share_ffn,
+            ) for _ in range(num_layers)
+        ])
+
+        
+        self.norm = nn.LayerNorm(d_model)
+      
+        self._init_weights()
+
+    def _init_weights(self):
+        
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+    def forward(self, x):
+       #x is (B,S,D) here
+                        
+        if x.dim() == 3:
+            if x.size(2) != self.d_model:
+                raise ValueError(f"Input last dim {x.size(2)} != d_model {self.d_model}")
+            h = x
+        else:
+            raise ValueError("Input must be (B,S,  D) i.e already embedded") 
+
+        # add positional embeddings 
+        L = h.size(1)
+        if L > self.seq_len:
+            raise ValueError(f"Sequence length {L} > seq_len {self.seq_len}")
+        h = h + self.pos_emb[:, :L, :]
+
+        # pass through stacked BiMambaBlocks
+        for layer in self.layers:
+            h = layer(h)
+
+        return self.norm(h)
+-----------------------------------------------------------------------------------------
+
+import torch
+import torch.nn as nn
+from models.base.bidirectional_mamba import BiMambaBlock, BiMambaEncoder
+
+
+class MambaPolarDecoder(nn.Module):
+    """
+    A decoder for Polar Codes of block length N based on Bidirectional Mamba.
+
+    Takes:
+      - Channel Observation Vector (N)
+      - Frozen Bit Prior Vector (N)
+      - SNR (single value, in dB)
+
+    Input shape:
+      channel_ob_vector : (batch_size, block_length)
+      frozen_prior      : (batch_size, block_length)
+
+    Output:
+      (batch_size, block_length) -> raw logits
+    """
+
+    def __init__(
+        self,
+        d_model: int = 64,
+        num_layer_encoder: int = 1,
+        num_layers_bimamba_block: int = 4,
+        seq_len: int = 512,
+        d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
+        dropout: float = 0.1,
+        residual_scale: float = 1.0,
+        share_norm: bool = False,
+        share_ffn: bool = False,
+    ):
+        super().__init__()
+
+        self.d_model = d_model
+        self.num_layer_encoder = num_layer_encoder
+        self.num_layers_bimamba_block = num_layers_bimamba_block
+        self.seq_len = seq_len
+        self.d_state = d_state
+        self.d_conv = d_conv
+        self.expand = expand
+        self.dropout = dropout
+
+        # learnable residual scale
+        self.residual_scale = nn.Parameter(torch.tensor(residual_scale))
+
+        # embeddings
+        self.discrete_embedding = nn.Embedding(2, self.d_model)   # frozen bits
+        self.linear_embedding1 = nn.Linear(1, self.d_model)      # channel values
+
+        # input fusion (NONLINEAR – important)
+        self.input_layer = nn.Sequential(
+            nn.Linear(2 * self.d_model, self.d_model),
+            nn.GELU(),
+            nn.Linear(self.d_model, self.d_model),
+        )
+
+        # BiMamba encoders
+        self.encoder_layers = nn.ModuleList([
+            BiMambaEncoder(
+                d_model=self.d_model,
+                num_layers=self.num_layers_bimamba_block,
+                seq_len=self.seq_len,
+                d_state=self.d_state,
+                d_conv=self.d_conv,
+                expand=self.expand,
+                dropout=self.dropout,
+            )
+            for _ in range(self.num_layer_encoder)
+        ])
+
+        # post-residual norms (ENABLED)
+        self.post_norms = nn.ModuleList([
+            nn.LayerNorm(self.d_model) for _ in range(self.num_layer_encoder)
+        ])
+
+        self.final_proj_layer = nn.Linear(self.d_model, 1)
+
+        self.init_weights_new()
+
+    def init_weights_new(self):
+        nn.init.xavier_uniform_(self.linear_embedding1.weight)
+        nn.init.zeros_(self.linear_embedding1.bias)
+
+        nn.init.normal_(self.discrete_embedding.weight, mean=0.0, std=1e-2)
+
+        nn.init.xavier_uniform_(self.final_proj_layer.weight)
+        nn.init.zeros_(self.final_proj_layer.bias)
+
+        for ln in self.post_norms:
+            nn.init.ones_(ln.weight)
+            nn.init.zeros_(ln.bias)
+
+    def forward(self, channel_ob_vector, frozen_prior, SNR_db=None):
+        if channel_ob_vector.dim() != 2 or frozen_prior.dim() != 2:
+            raise ValueError(
+                "channel_ob_vector and frozen_prior must be (batch, seq_len)"
+            )
+
+        # embeddings
+        ch_emb = self.linear_embedding1(channel_ob_vector.unsqueeze(-1))
+        froz_emb = self.discrete_embedding(frozen_prior)
+
+        # fuse inputs
+        x = torch.cat([ch_emb, froz_emb], dim=-1)
+        x = self.input_layer(x)
+
+        # BiMamba encoder stack
+        for idx, layer in enumerate(self.encoder_layers):
+            x_new = layer(x)
+            x = x_new * self.residual_scale + x
+            x = self.post_norms[idx](x)
+
+        # bit logits
+        return self.final_proj_layer(x).squeeze(-1)
+----------------------------------------------------------------------
+
+
+
+from torch.utils.data import Dataset, DataLoader
+import torch, pandas as pd, numpy as np
+from generate_dataset import generate_data
+import math
+
+
+DATASET_PATH = '../scripts/data_32bits_polar.csv'
+
+class PolarDecDataset(Dataset):
+
+    def __init__(
+        self,
+        snr_list,                    
+        num_samples,
+        seq_length,
+        fixed_msg_bit_size=None
+    ):
+        super().__init__()
+        self.snr_list = snr_list
+        self.num_samples = num_samples
+        self.fixed_msg_bit_size = fixed_msg_bit_size
+        self.seq_length = seq_length
+
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+
+        #  random message length
+        message_bit_size = (
+            np.random.choice([8, 16, 24])
+            if self.fixed_msg_bit_size is None
+            else self.fixed_msg_bit_size
+        )
+
+        #  snr list here
+        snr_db = np.random.choice(self.snr_list)
+
+        channel_observation_vector, frozen_bit_prior, target = generate_data(
+            message_bit_size=message_bit_size,
+            SNRs_db=[snr_db]
+        )
+
+        channel_tensor = torch.tensor(channel_observation_vector, dtype=torch.float32)
+        frozen_tensor = torch.tensor(frozen_bit_prior, dtype=torch.float32)
+        snr_tensor = torch.tensor(snr_db, dtype=torch.float32)
+        target_tensor = torch.tensor(target, dtype=torch.float32)
+
+        code_rate = message_bit_size / self.seq_length
+
+        llrs = (
+            2
+            * channel_tensor
+            * math.pow(10, snr_db / 10)
+            * code_rate
+        )
+
+        return llrs, frozen_tensor, snr_tensor, target_tensor
+
+
+
+-------------------------------------
+
+import re, json
+import numpy as np
+import pandas as pd
+
+N_MAX = 1024
+K_START = 12
+
+
+
+def get_reliability_seq(N: int, master_reliability_sequence: list):
+   
+   
+   """Returns a reliability sequence for a given blocklength N"""
+
+   rel_seq = []
+   count=0
+
+   while len(rel_seq)!=N:
+   #   print("count is ", count)
+      rel_seq.append(master_reliability_sequence[count]) if master_reliability_sequence[count]<N else None
+      count+=1
+
+   assert(len(rel_seq)==N)
+   
+   return rel_seq
+
+
+def find_N(message_bits_length):
+
+   """
+   Given length of message bits to be encoded, finds the appropriate block length N 
+   """
+
+   assert(message_bits_length!=0 & message_bits_length<=N_MAX)
+
+   for i in [32, 64, 128, 512, 1024]:
+      if message_bits_length <= i:
+         return i
+      
+   print(f"Error! Message bits length is out of bound: {message_bits_length}")
+   return
+      
+
+
+
+def create_channel_input_vector(message_bits):
+
+    """
+    Takes in message bits and returns the channel input vector (u), frozen bit prior vector (Akc)
+
+    u is the vector consisting of message bits in positions with high reliability. Rest are frozen bits.
+    """
+
+    N= find_N(len(message_bits))
+
+    channel_input_vector =[0] * N
+    frozen_bits_prior_vector =[1] * N
+    
+   
+    assert(re.fullmatch('[01]+', ''.join(str(i) for i in message_bits)))
+    
+    
+    with open("reliability_sequences.json", 'r+') as f:
+       data = json.load(f)
+       
+       reliability_seq = data[str(N)]
+       frozen_sets =  reliability_seq[len(message_bits):]
+
+       if len(reliability_seq)==0: # reliability sequence for that N is not yet computed
+          
+         reliability_seq = get_reliability_seq(N, data["master_list"])
+         data[str(N)] = reliability_seq
+
+         f.seek(0)
+         json.dump(data, f, indent=4)
+         f.truncate()
+         f.close()
+    
+    for i in range(len(message_bits)):
+       channel_input_vector[reliability_seq[i]] = message_bits[i]
+    
+    for i in frozen_sets:
+       frozen_bits_prior_vector[i]=0
+       
+       
+    return channel_input_vector, frozen_bits_prior_vector, N
+
+
+def polar_encode(N: int, channel_input_vector:list):
+
+   """
+   Returns the polar encoded version of channel_input_vector using butterfly loop
+   """
+
+   assert(N==len(channel_input_vector))
+   n = int(np.log2(N))
+
+   x = channel_input_vector.copy()
+   for i in range(n):
+        step = 2**i
+        for j in range(0, N, 2*step):
+            for k in range(step):
+                x[j+k] ^= int(x[j+k+step])  # XOR operation
+
+   return np.array(x).astype(int)
+
+
+def modulation_bpsk(polar_coded_msg: np.ndarray):
+    """
+    polar_coded_msg: numpy array of 0/1 bits
+    returns: numpy array of BPSK symbols (+1/-1)
+    """
+    return 1 - 2 * polar_coded_msg
+
+
+
+def one_hot(msg_bit_sequence: int):
+
+   """
+   Encodes the message bit sequence into a one hot encoded format.
+   """
+
+   
+   assert re.fullmatch('[01]+', ''.join(str(i) for i in msg_bit_sequence)), "Sequence must contain only 0 or 1"
+
+   seq_array = np.array([b for b in msg_bit_sequence], dtype=int)
+   one_hot = np.zeros((len(seq_array), 2), dtype=int)
+   one_hot[np.arange(len(seq_array)), seq_array] = 1 # fancy way of creating one hot encoding: [0, 1, 2], [0, 1, 0] => insert 1 at one_hot[0,0], one_hot[1,1] and so on
+   return one_hot
+   
+
+
+def one_hot_smoothing(msg_bit_sequence: int, num_classes=2, smoothing_factor=0.1):
+
+   """
+   Converts the given binary sequence into a list of one hot smoothed vectors.
+   """
+
+   one_hot_encoded = one_hot(msg_bit_sequence)
+   smoothed = (1 - smoothing_factor) * one_hot_encoded + (smoothing_factor / 2)
+   return np.round(smoothed, 3)
+
+
+def awgn_channel(modulated_sequence:list, SNRs_db:list, message_bit_size:int, block_length:int):
+
+   """
+   Takes in a modulated sequence and list of SNR values in db (both 1D).
+
+   Returns a list of lists of the AWGN channel outputs on the various SNR values defined in SNRs_db list
+   """
+
+   SNRs_db = np.array(SNRs_db)
+
+   code_rate = float(message_bit_size)/float(block_length)
+
+   SNRs_linear = 10**(SNRs_db/10)
+
+   variances = np.sqrt(1/(2*code_rate*SNRs_linear))
+
+
+   noises = []
+
+   for variance in variances:
+      noise = np.random.normal(0, variance, size=( block_length))
+     # print(noise)
+      noises.append(noise)
+   
+   noises_np = np.array(noises)
+ #  print(noises_np.shape)
+
+   result = noises_np + modulated_sequence
+   result = result.squeeze(0)
+
+   return result
+
+
+
+
+def generate_data(message_bit_size, SNRs_db):
+
+   """
+   Generates a single data instance for given message bit size.
+
+   """
+
+   msg_sequence = np.random.randint(0, 2, size=message_bit_size)
+ #  target = one_hot_smoothing(msg_sequence, smoothing_factor=smoothing_factor)
+   
+   
+
+   civ, frozen_bit_prior, N = create_channel_input_vector(message_bits=msg_sequence)
+   polar_coded_form = polar_encode(N, civ)
+   modulated_signal = modulation_bpsk(polar_coded_msg=polar_coded_form)
+
+   channel_observation_vector = awgn_channel(modulated_sequence=modulated_signal, SNRs_db=SNRs_db, message_bit_size=message_bit_size, block_length=N)
+   # Example: during dataset __getitem__, you can re-sample noise each call
+   # channel_observation_vector = awgn_channel(modulated_signal, SNRs_db=[snr_db], message_bit_size=message_bit_size, block_length=N)
+
+   target = civ
+
+  # print(f"Shape of channel observation vector: {channel_observation_vector.shape}")
+   
+
+   return channel_observation_vector, frozen_bit_prior, target
+
+
+
+def generate_dataset(message_bit_size, SNRs_db, smoothing_factor, num_samples):
+
+   """
+   Generates a complete dataset(dataframe) of size num_samples for a Polar Code Decoder
+
+   Features:  Channel Observation Vector (varying SNRs as specified by SNRs_db), Frozen bit prior vector, 
+   Target: Message bits (1 hot smoothed)
+   Extras: Original message sequence
+   """
+
+   columns = [f'channel_ob_vector_snr_{i}' for i in SNRs_db] + ['frozen_bit_prior', 'original_msg', 'target']
+
+   dataset = []
+
+   for i in range(num_samples):
+
+      print(f"Generating {i}th sample...\n")
+
+      channel_observation_vector, frozen_bit_prior, target, msg_sequence = generate_data(message_bit_size, SNRs_db, smoothing_factor)
+      instance = [channel_observation_vector[i] for i in range(len(SNRs_db))] + [frozen_bit_prior, msg_sequence, target]
+      dataset.append(instance)
+   
+   print("Generation completed!")
+   
+   return pd.DataFrame(dataset, columns=columns)
+
+
+-----------------------------------------------------
+
+import os
+import json
+import copy
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+
+from dataset import PolarDecDataset
+from models.wrappers.mamba_32bits import MambaPolarDecoder
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print("Device:", device)
+
+CONFIG_NO = 5
+N = 32
+
+
+snr_curriculum = [
+    7.8, 7.5, 7.3, 7, 6.8, 6.5, 6.3, 6, 5.8, 5.5, 5.2,
+    5, 4.8, 4.5, 4.2, 4, 3.8, 3.5, 3.2, 3, 2.8,
+    2.5, 2.2, 2, 1.8, 1.5, 1.2, 1, 0.8, 0.5, 0.3, 0
+]
+
+test_snr_list = [10,5,0]
+
+num_train_samples = 200000
+num_test_samples = 4000
+batch_size = 32
+
+train_dataset = PolarDecDataset(
+    snr_list=[10, 9, 8],  
+    num_samples=num_train_samples,
+    seq_length=N
+)
+
+test_dataset = PolarDecDataset(
+    snr_list=test_snr_list,
+    num_samples=num_test_samples,
+    seq_length=N
+)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=batch_size)
+model = MambaPolarDecoder(
+    d_model=64,
+    num_layer_encoder=1,
+    num_layers_bimamba_block=20,
+    seq_len=N,
+    d_state=32,
+    d_conv=6,
+    expand=2,
+).to(device)
+
+
+ckpt_path = "./checkpoints/config_2_firstbiblock20/model_best_block_epoch_5_snr_8.pt"
+ckpt = torch.load(ckpt_path, map_location=device,weights_only=False)
+model.load_state_dict(ckpt["state_dict"])
+
+print("Loaded pretrained model from:", ckpt_path)
+
+
+
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, mode="min", factor=0.5, patience=3, min_lr=1e-6
+)
+
+loss_fn = nn.BCEWithLogitsLoss()
+
+
+def calc_save_ber(
+    model,
+    device,
+    snr_values,
+    msg_bit_sizes,
+    num_samples=3200,
+    batch_size=32,
+    config_no=0,
+    epoch=0,
+    save_dir="src/evaluation"
+):
+    model.eval()
+    os.makedirs(save_dir, exist_ok=True)
+    config_dir = os.path.join(save_dir, f"config_{config_no}")
+    os.makedirs(config_dir, exist_ok=True)
+
+    eval_results = {}
+
+    for snr in snr_values:
+        print(f"\nEvaluating for SNR = {snr} dB\n")
+        snr_key = f"{snr}_snr"
+        eval_results[snr_key] = {}
+        ber_list = []
+
+        for msg_bits in msg_bit_sizes:
+            total_msg_errors = 0
+            total_frozen_errors = 0
+            total_msg_bits = 0
+            total_frozen_bits = 0
+
+            test_set = PolarDecDataset(
+                snr_list=[snr],
+                num_samples=num_samples,
+                fixed_msg_bit_size=msg_bits,
+                seq_length=N
+            )
+            loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+
+            with torch.no_grad():
+                for llrs, frozen, snr_t, target in loader:
+                    llrs = llrs.to(device).float()
+                    frozen = frozen.to(device).long()
+                    target = target.to(device).long()
+
+                    logits = model(llrs, frozen, snr_t.to(device))
+                    predicted = (logits > 0).long()
+
+                    mask_msg = frozen == 1
+                    mask_frozen = frozen == 0
+
+                    total_msg_errors += (target[mask_msg] != predicted[mask_msg]).sum().item()
+                    total_frozen_errors += (target[mask_frozen] != predicted[mask_frozen]).sum().item()
+                    total_msg_bits += mask_msg.sum().item()
+                    total_frozen_bits += mask_frozen.sum().item()
+
+            total_bits = total_msg_bits + total_frozen_bits
+            total_errors = total_msg_errors + total_frozen_errors
+            avg_net_ber = total_errors / total_bits
+
+            ber_list.append(avg_net_ber)
+            eval_results[snr_key][str(msg_bits)] = {
+                "average_net_bit_error_rate": avg_net_ber
+            }
+
+        eval_results[snr_key]["overall_ber"] = sum(ber_list) / len(ber_list)
+
+    json_file = os.path.join(config_dir, f"ber_epoch_{epoch+1}.json")
+    with open(json_file, "w") as f:
+        json.dump(eval_results, f, indent=4)
+
+    return eval_results
+
+def train_one_epoch(batches=1000):
+    model.train()
+    running_loss = 0.0
+
+    for i, (channel, frozen, snr, target) in enumerate(train_loader):
+        channel = channel.float().to(device)
+        frozen = frozen.int().to(device)
+        target = target.float().to(device)
+
+        optimizer.zero_grad()
+        out = model(channel, frozen, snr.float().to(device))
+
+        mask_msg = frozen == 1
+        loss = loss_fn(out[mask_msg], target[mask_msg])
+
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+
+        running_loss += loss.item()
+
+        if (i + 1) % batches == 0:
+            return running_loss / batches
+
+    return running_loss / (i + 1)
+
+def train():
+    best_val_ber = 1.0
+
+    # Already trained up to SNR 8
+    active_snrs = [10, 9, 8]
+
+    for snr in snr_curriculum:
+        print(f"\nTraining with new SNR {snr}")
+
+        if snr not in active_snrs:
+            active_snrs.append(snr)
+
+        train_dataset.snr_list = active_snrs
+        print("Active SNRs:", active_snrs)
+
+        best_loss_in_block = float("inf")
+        best_epoch_in_block = 0
+        best_state_dict = None
+
+        for epoch in range(6):
+            avg_loss = train_one_epoch(batches=1000)
+            print(f"SNR {snr} | Epoch {epoch+1}/6 | Loss {avg_loss:.6f}")
+
+            if avg_loss < best_loss_in_block:
+                best_loss_in_block = avg_loss
+                best_epoch_in_block = epoch
+                best_state_dict = copy.deepcopy(model.state_dict())
+
+        model.load_state_dict(best_state_dict)
+
+        val_results = calc_save_ber(
+            model,
+            device,
+            snr_values=test_snr_list,
+            msg_bit_sizes=[8, 16, 24],
+            num_samples=3200,
+            batch_size=32,
+            config_no=CONFIG_NO,
+            epoch=best_epoch_in_block,
+            save_dir="src/evaluation"
+        )
+
+        avg_vloss = np.mean(
+            [val_results[f"{s}_snr"]["overall_ber"] for s in test_snr_list]
+        )
+
+        scheduler.step(avg_vloss)
+
+        model_dir = f"./checkpoints/config_{CONFIG_NO}"
+        os.makedirs(model_dir, exist_ok=True)
+        model_path = f"{model_dir}/model_best_block_epoch_{best_epoch_in_block+1}_snr_{snr}.pt"
+
+        
+        torch.save({
+            "comments": "Removed the snr as input entirely. Use SNR linear if needed.",
+            "model_config": {
+                "d_model": model.d_model,
+                "num_layer_encoder": model.num_layer_encoder,
+                "num_layers_bimamba_block": model.num_layers_bimamba_block,
+                "seq_len": model.seq_len,
+                "d_state": model.d_state,
+                "d_conv": model.d_conv,
+                "expand": model.expand,
+            },
+            "epoch": best_epoch_in_block + 1,
+            "train_loss": best_loss_in_block,
+            "val_loss": avg_vloss,
+            "state_dict": best_state_dict
+        }, model_path)
+
+        print(f"Saved checkpoint: {model_path}")
+
+    print("\nTraining finished.")
+
+  
+
+
+  
+
+  
+
+  
+
+
+    
+
+
+        
